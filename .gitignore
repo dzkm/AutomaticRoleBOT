@@ -127,3 +127,9 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+#Other stuff
+Token.txt
+.vscode
+.git
+AutoRoleBot.code-workspace
