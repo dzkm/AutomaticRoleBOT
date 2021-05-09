@@ -60,6 +60,7 @@ async def ExtractList(jsonInput):
         Info.cor = entry['input'][0]
         Info.cargo = entry['input'][1]
         Info.dataCriada = entry["createdAt"]
+
         try:
             Info.discorduser = entry['input'][2]
         except IndexError:
@@ -69,10 +70,14 @@ async def ExtractList(jsonInput):
             Info.message = entry['message']
         except KeyError:
             Info.message = "None."
-        Info.currid = await nextID()
-        dataList = {"InternalID": Info.currid, "redeemID": Info.redeemid, "redeemer": Info.redeemer, "item": Info.item, "cor": Info.cor, "cargo":Info.cargo, "discord": Info.discorduser, "mensagem": Info.message, "dataCriado": Info.dataCriada, "dataAdicionado": str(datetime.datetime.now())}
-        await log("USER SENT TO THE DATABASE\n\tInternalID: {0}\n\tUsername:{1}\n\tDiscord Username:{2}\n\tCargo:{3}\n\tCor do Cargo:{4}\n\tReedem ID:{5}".format(Info.currid,Info.redeemer, Info.discorduser, Info.cargo, Info.cor, Info.lastredeemid), 1)
-        await dbredeem.insert_one(dbName, colName, dataList)
+
+        if not await dbredeem.bDataExist(dbName, colName, "redeemID", Info.redeemid):
+            Info.currid = await nextID()
+            dataList = {"InternalID": Info.currid, "redeemID": Info.redeemid, "redeemer": Info.redeemer, "item": Info.item, "cor": Info.cor, "cargo":Info.cargo, "discord": Info.discorduser, "mensagem": Info.message, "dataCriado": Info.dataCriada, "dataAdicionado": str(datetime.datetime.now())}
+            await log("USER SENT TO THE DATABASE\n\tInternalID: {0}\n\tUsername:{1}\n\tDiscord Username:{2}\n\tCargo:{3}\n\tCor do Cargo:{4}\n\tReedem ID:{5}".format(Info.currid,Info.redeemer, Info.discorduser, Info.cargo, Info.cor, Info.redeemid), 1)
+            await dbredeem.insert_one(dbName, colName, dataList)
+        else:
+            await log("Redemption with ID {0} already exists, ignoring".format(Info.redeemid), 2)
         
 """ 
 Filters the List to only have reedems of Discord. This works like a fucking professional piece of code.
@@ -101,7 +106,7 @@ async def FilterList(jsonInput, searchKey='docs', jsonKeys=[]):
                     await log("redeemID {0} exists. Skipping...".format(key['_id']))
             currentKey +=1
     #This only adds to the filteredJson list and makes sure it doesn't repeat
-    for keyPos in jsonKeys:
+    for keyPos in reversed(jsonKeys):
         if jsonInput[searchKey][keyPos]['item']['_id'] == "608c882a4c7577541a456ba7":
             if jsonInput[searchKey][keyPos]['_id'] != lastid:
                 filteredJson.append(jsonInput[searchKey][keyPos])
@@ -115,7 +120,7 @@ async def ProcessData():
     jsonDocs = jsonData['docs']
     Info.newredeemid = jsonDocs[0]['_id']
     if Info.newredeemid != Info.lastredeemid:
-        await log("Detected new request in reedems", 1)
+        await log("Detected new request in reedems with ID {0}".format(Info.newredeemid), 1)
         jsonKeys = await GetSinceLastData()
         await FilterList(jsonData,'docs', jsonKeys=jsonKeys)
     else:
@@ -158,10 +163,10 @@ async def main():
     while True:
         lastInserted = await dbredeem.get_last_inserted(dbName, colName)
         if lastInserted:
-            Info.lastredeemid = lastInserted["redeemID"]
+            Info.lastredeemid = lastInserted['redeemID']
         else:
             Info.lastredeemid = 0
-        
+        await log("The last redeemID inserted is {0}".format(Info.lastredeemid), 5)
         await ProcessData()
         await asyncio.sleep(5)
 

@@ -34,11 +34,23 @@ class Database():
         try:
             return col.find({}).sort("InternalID", mongo.DESCENDING).limit(1).next() #This is the most complicated. It finds anything, with ASCENDING sort, limit it to the first one and selects it.]
         except StopIteration:
-            log("The collection is empty.", 3)
+            await log("The collection is empty.", 3)
     async def get_collection_count(database, collection):
         db = await Database.ConnectDB(database)
         col = db[collection]
         return col.count_documents({})
+    async def bDataExist(database, collection, key, value):
+        db = await Database.ConnectDB(database)
+        col = db[collection]
+        try:
+            dataFound = col.find({key: value}).limit(1).next()
+            if len(dataFound) > 0:
+                return True
+            else:
+                return False
+        except StopIteration:
+            return False
+
 
 if __name__ == "__main__":
     asyncio.run(log("Do not run this file directly. It's a library", 4)) #Bruh
