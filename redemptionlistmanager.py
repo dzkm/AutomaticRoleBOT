@@ -59,7 +59,6 @@ async def ExtractList(jsonInput):
         Info.item = entry['item']['name']
         Info.cor = entry['input'][0]
         Info.cargo = entry['input'][1]
-        Info.lastredeemid = entry["_id"]
         Info.dataCriada = entry["createdAt"]
         try:
             Info.discorduser = entry['input'][2]
@@ -72,8 +71,7 @@ async def ExtractList(jsonInput):
             Info.message = "None."
         Info.currid = await nextID()
         dataList = {"InternalID": Info.currid, "redeemID": Info.redeemid, "redeemer": Info.redeemer, "item": Info.item, "cor": Info.cor, "cargo":Info.cargo, "discord": Info.discorduser, "mensagem": Info.message, "dataCriado": Info.dataCriada, "dataAdicionado": str(datetime.datetime.now())}
-        log("Sending {0} to file".format(dataList['redeemer']), 1)
-        log("USER SENT SUCESSFULLY TO THE DATABASE\n\tInternalID: {0}\n\tUsername:{1}\n\tDiscord Username:{2}\n\tCargo:{3}\n\tCor do Cargo:{4}\n\tReedem ID:{5}".format(Info.currid,Info.redeemer, "NOT AVAILABLE", Info.cargo, Info.cor, Info.lastredeemid), 0)
+        await log("USER SENT TO THE DATABASE\n\tInternalID: {0}\n\tUsername:{1}\n\tDiscord Username:{2}\n\tCargo:{3}\n\tCor do Cargo:{4}\n\tReedem ID:{5}".format(Info.currid,Info.redeemer, Info.discorduser, Info.cargo, Info.cor, Info.lastredeemid), 1)
         await dbredeem.insert_one(dbName, colName, dataList)
         
 """ 
@@ -87,10 +85,9 @@ async def FilterList(jsonInput, searchKey='docs', jsonKeys=[]):
     
     if len(jsonKeys) > 0:
         _HASJSONKEYS = True
-        log("jsonKeys came fine", 1)
     else:
         _HASJSONKEYS = False
-        log("jsonKeys is missing.", 2)
+        await log("jsonKeys were not sent. Making hard checkup.", 3)
     
     #This method goes through all keys and filters the one with the ID provided below. Works hella fine.
     if not _HASJSONKEYS:
@@ -98,10 +95,10 @@ async def FilterList(jsonInput, searchKey='docs', jsonKeys=[]):
         for key in jsonInput[searchKey]:
             if key['item']['_id'] == "608c882a4c7577541a456ba7":
                 if not await _DATAEXIST({"redeemID": key['_id']}):
-                    print("redeemID {0} does not exists. Adding...".format(key['_id']))
+                    await log("redeemID {0} does not exists. Adding...".format(key['_id']), 5)
                     jsonKeys.append(currentKey)
                 else:
-                    print("redeemID {0} exists. Skipping...".format(key['_id']))
+                    await log("redeemID {0} exists. Skipping...".format(key['_id']))
             currentKey +=1
     #This only adds to the filteredJson list and makes sure it doesn't repeat
     for keyPos in jsonKeys:
@@ -116,22 +113,22 @@ async def FilterList(jsonInput, searchKey='docs', jsonKeys=[]):
 async def ProcessData():
     jsonData = await GetData()
     jsonDocs = jsonData['docs']
-    Info.newredeemid = jsonDocs[0]["_id"]
+    Info.newredeemid = jsonDocs[0]['_id']
     if Info.newredeemid != Info.lastredeemid:
-        log("[NEW ROLE REQUEST DETECTED]", 1)
+        await log("Detected new request in reedems", 1)
         jsonKeys = await GetSinceLastData()
         await FilterList(jsonData,'docs', jsonKeys=jsonKeys)
     else:
-        log("Nenhum usuário novo...", 1)
+        await log("Nenhum usuário novo...", 1)
 
 
 async def GetSinceLastData():
     jsonData = await GetData()
-
+    jsonDocs = jsonData['docs']
     currentKey = 0
     jsonKeys = []
 
-    for key in jsonData['docs']:
+    for key in jsonDocs:
         if key['_id'] == Info.lastredeemid:
             break
         else:
@@ -153,25 +150,18 @@ async def GetData():
 
 async def main():
     #This is the main function (duh)
-
-    """
-    Temporary variable to make the last reedem unknown. 
-    TODO - Make this come from a Database (DONE)
-    """
-    lastInserted = await dbredeem.get_last_inserted(dbName, colName)
-    if lastInserted:
-        Info.lastredeemid = lastInserted["redeemID"]
-    else:
-        Info.lastredeemid = 0
-
     """
     This function runs indefinetly. It checks for new discord role redeems every 5 seconds
     TODO - Make it call something to add to database (DONE)
-    - Forma de verificar se os ultimos dados recebidos não são os mesmos
-    - Assim que verificado, rodar uma verificação desde o ultimo inserido no banco de dados até o ultimo presente nos dados recebidos pela API diretamente do JSON provido.
     """
 
     while True:
+        lastInserted = await dbredeem.get_last_inserted(dbName, colName)
+        if lastInserted:
+            Info.lastredeemid = lastInserted["redeemID"]
+        else:
+            Info.lastredeemid = 0
+        
         await ProcessData()
         await asyncio.sleep(5)
 

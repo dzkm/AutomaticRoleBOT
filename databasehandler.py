@@ -27,12 +27,12 @@ class Database():
         db = await Database.ConnectDB(database)
         col = db[collection]
         result = col.insert_one(dataTable)
-        log("Redeem entry with ID {0} succefully sent".format(result.inserted_id), 0)
+        await log("Entry <{0}> sent to collection <{1}> in database <{2}>".format(result.inserted_id, collection, database), 0)
     async def get_last_inserted(database, collection):
         db = await Database.ConnectDB(database)
         col = db[collection]
         try:
-            return col.find({}).sort("InternalID", mongo.ASCENDING).limit(1).next() #This is the most complicated. It finds anything, with ASCENDING sort, limit it to the first one and selects it.]
+            return col.find({}).sort("InternalID", mongo.DESCENDING).limit(1).next() #This is the most complicated. It finds anything, with ASCENDING sort, limit it to the first one and selects it.]
         except StopIteration:
             log("The collection is empty.", 3)
     async def get_collection_count(database, collection):
@@ -41,6 +41,6 @@ class Database():
         return col.count_documents({})
 
 if __name__ == "__main__":
-    log("Do not run this file directly. It's a library", 4) #Bruh
+    asyncio.run(log("Do not run this file directly. It's a library", 4)) #Bruh
     
 
