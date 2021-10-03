@@ -14,6 +14,7 @@ dist/
 downloads/
 eggs/
 .eggs/
+Scripts/
 lib/
 lib64/
 parts/
@@ -130,6 +131,6 @@ dmypy.json
 
 #Other stuff
 Token.txt
-.vscode
+.vscode 
 .git
 AutoRoleBot.code-workspace
