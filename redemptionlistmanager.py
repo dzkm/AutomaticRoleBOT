@@ -1,51 +1,28 @@
-import requests
 import asyncio
-import json
 import datetime
+import settings.settingsHandler as cfg
+import classes.helpers.api as api
+import classes.helpers.database as dbredeem
+import classes.dataStorage as dataStorage
+import classes.helpers.connections as connections
 from logHandler import log
-from databasehandler import Database as dbredeem
-from pprint import pprint
-from requests.structures import CaseInsensitiveDict
-from os import getcwd as CURR_DIR
+
+#TODO:
+#Enviar as referencias da configurações
+#Separar a parte de requests em outro script
+#Alterar as referencias da classe antiga para o redeeminfo
+#Adicionar o script de DB em alguma pasta
+class config:
+    fConfig = cfg.readConfig()
+    dbName = fConfig["MongoDB"]["dbName"]
+    colName = fConfig["MongoDB"]["dbCol"]
+    channelName = fConfig["Twitch"]["channelName"]
+    redeemItemID = api.getItemID(fConfig["StreamElements"]["itemName"], channelName)
 
 
-dbName = 'redemptions'
-colName = 'redeems'
-channelName = "5a41d7a44469c70001f174fc"
-urlAPI = "https://api.streamelements.com/kappa/v2/store/{0}/redemptions/?pending=true".format(channelName)
-
-class Info:
-    async def __init__(self, currid, redeemid, redeemer, cargo, cor, item, message, lastredeemid, discorduser, newredeemid):
-        self.currid = currid
-        self.redeemid = redeemid
-        self.redeemer = redeemer
-        self.cargo = cargo
-        self.cor = cor
-        self.item = item
-        self.message = message
-        self.lastredeemid = lastredeemid
-        self.discorduser = discorduser
-        self.newredeemid = newredeemid
-    async def reqheaders():
-        headers = CaseInsensitiveDict()
-        headers["Accept"] = "application/json"
-        headers["Content-Type"] = "text/plain"
-        headers["Authorization"] = "Bearer {}".format(await GetAuthToken())
-        return headers
-#Gets AuthToken from token.txt
-async def GetAuthToken():
-    file = open(CURR_DIR() + "\Token.txt", "r")
-    return file.readline().strip()
-
-#Checks if Data already exists in Database
-async def _DATAEXIST(inputData):
-    if await dbredeem.find_one(dbName, colName, inputData) == None:
-        return False
-    else:
-        return True
 
 async def nextID():
-    oldID = await dbredeem.get_collection_count(dbName, colName)
+    oldID = await dbredeem.get_collection_count(config.dbName, config.colName)
     newID = oldID + 1
     return newID
 
@@ -54,30 +31,30 @@ Extract the list using OOP. It just feels right to do so.
 """
 async def ExtractList(jsonInput):
     for entry in jsonInput:
-        Info.redeemid = entry["_id"]
-        Info.redeemer = entry['redeemer']['username']
-        Info.item = entry['item']['name']
-        Info.cor = entry['input'][0]
-        Info.cargo = entry['input'][1]
-        Info.dataCriada = entry["createdAt"]
+        dataStorage.redeemData.redeemid = entry["_id"]
+        dataStorage.redeemData.redeemer = entry['redeemer']['username']
+        dataStorage.redeemData.item = entry['item']['name']
+        dataStorage.redeemData.cor = entry['input'][0]
+        dataStorage.redeemData.cargo = entry['input'][1]
+        dataStorage.redeemData.dataCriada = entry["createdAt"]
 
         try:
-            Info.discorduser = entry['input'][2]
+            dataStorage.redeemData.discorduser = entry['input'][2]
         except IndexError:
-            Info.discorduser = "NONE PROVIDED (OLD ENTRY)"
+            dataStorage.redeemData.discorduser = "NONE PROVIDED (OLD ENTRY)"
         
         try:
-            Info.message = entry['message']
+            dataStorage.redeemData.message = entry['message']
         except KeyError:
-            Info.message = "None."
+            dataStorage.redeemData.message = "None."
 
-        if not await dbredeem.bDataExist(dbName, colName, "redeemID", Info.redeemid):
-            Info.currid = await nextID()
-            dataList = {"InternalID": Info.currid, "redeemID": Info.redeemid, "redeemer": Info.redeemer, "item": Info.item, "cor": Info.cor, "cargo":Info.cargo, "discord": Info.discorduser, "mensagem": Info.message, "dataCriado": Info.dataCriada, "dataAdicionado": str(datetime.datetime.now())}
-            await log("USER SENT TO THE DATABASE\n\tInternalID: {0}\n\tUsername:{1}\n\tDiscord Username:{2}\n\tCargo:{3}\n\tCor do Cargo:{4}\n\tReedem ID:{5}".format(Info.currid,Info.redeemer, Info.discorduser, Info.cargo, Info.cor, Info.redeemid), 1)
-            await dbredeem.insert_one(dbName, colName, dataList)
+        if not await dbredeem.bRedeemExist(config.dbName, config.colName, "redeemID", dataStorage.redeemData.redeemid):
+            dataStorage.redeemData.currid = await nextID()
+            dataList = {"InternalID": dataStorage.redeemData.currid, "redeemID": dataStorage.redeemData.redeemid, "redeemer": dataStorage.redeemData.redeemer, "item": dataStorage.redeemData.item, "cor": dataStorage.redeemData.cor, "cargo":dataStorage.redeemData.cargo, "discord": dataStorage.redeemData.discorduser, "mensagem": dataStorage.redeemData.message, "dataCriado": dataStorage.redeemData.dataCriada, "dataAdicionado": str(datetime.datetime.now())}
+            await log("USER SENT TO THE DATABASE\n\tInternalID: {0}\n\tUsername:{1}\n\tDiscord Username:{2}\n\tCargo:{3}\n\tCor do Cargo:{4}\n\tReedem ID:{5}".format(dataStorage.redeemData.currid,dataStorage.redeemData.redeemer, dataStorage.redeemData.discorduser, dataStorage.redeemData.cargo, dataStorage.redeemData.cor, dataStorage.redeemData.redeemid), 1)
+            await dbredeem.insert_one(config.dbName, config.colName, dataList)
         else:
-            await log("Redemption with ID {0} already exists, ignoring".format(Info.redeemid), 2)
+            await log("Redemption with ID {0} already exists, ignoring".format(dataStorage.redeemData.redeemid), 2)
         
 """ 
 Filters the List to only have reedems of Discord. This works like a fucking professional piece of code.
@@ -99,7 +76,7 @@ async def FilterList(jsonInput, searchKey='docs', jsonKeys=[]):
         currentKey = 0
         for key in jsonInput[searchKey]:
             if key['item']['_id'] == "608c882a4c7577541a456ba7":
-                if not await _DATAEXIST({"redeemID": key['_id']}):
+                if not await dbredeem._DATAEXIST({"redeemID": key['_id']}):
                     await log("redeemID {0} does not exists. Adding...".format(key['_id']), 5)
                     jsonKeys.append(currentKey)
                 else:
@@ -108,19 +85,23 @@ async def FilterList(jsonInput, searchKey='docs', jsonKeys=[]):
     #This only adds to the filteredJson list and makes sure it doesn't repeat
     for keyPos in reversed(jsonKeys):
         if jsonInput[searchKey][keyPos]['item']['_id'] == "608c882a4c7577541a456ba7":
-            if jsonInput[searchKey][keyPos]['_id'] != lastid:
-                filteredJson.append(jsonInput[searchKey][keyPos])
-                lastid = jsonInput[searchKey][keyPos]['_id']
+            if not await dbredeem._DATAEXIST({"redeemID": jsonInput[searchKey][keyPos]['_id']}):
+                if jsonInput[searchKey][keyPos]['_id'] != lastid:
+                    filteredJson.append(jsonInput[searchKey][keyPos])
+                    lastid = jsonInput[searchKey][keyPos]['_id']
                 #i += 1
     #Send it to extraction
-    await ExtractList(filteredJson)
+    if len(filteredJson) > 0:
+        await log("Detected new request in reedems with ID {0}".format(dataStorage.redeemData.newredeemid), 1)
+        await ExtractList(filteredJson)
+    else:
+        await log("New reedems detected, but it's not the item required", 5)
 
 async def ProcessData():
-    jsonData = await GetData()
+    jsonData = await connections.userInfo.getRedemptions(config.channelName)
     jsonDocs = jsonData['docs']
-    Info.newredeemid = jsonDocs[0]['_id']
-    if Info.newredeemid != Info.lastredeemid:
-        await log("Detected new request in reedems with ID {0}".format(Info.newredeemid), 1)
+    dataStorage.redeemData.newredeemid = jsonDocs[0]['_id']
+    if dataStorage.redeemData.newredeemid != dataStorage.redeemData.lastredeemid:
         jsonKeys = await GetSinceLastData()
         await FilterList(jsonData,'docs', jsonKeys=jsonKeys)
     else:
@@ -128,28 +109,21 @@ async def ProcessData():
 
 
 async def GetSinceLastData():
-    jsonData = await GetData()
+    jsonData = await connections.userInfo.getRedemptions(config.channelName)
     jsonDocs = jsonData['docs']
     currentKey = 0
     jsonKeys = []
 
     for key in jsonDocs:
-        if key['_id'] == Info.lastredeemid:
+        if key['item']['_id'] == "608c882a4c7577541a456ba7":
+            continue
+        if key['_id'] == dataStorage.redeemData.lastredeemid:
             break
         else:
             jsonKeys.append(currentKey)
         currentKey += 1
     return jsonKeys
 
-
-""" 
-This function calls the API so we can get the json
-"""
-async def GetData():
-    redemptionListURL = urlAPI
-    request = requests.request("GET", redemptionListURL, headers=await Info.reqheaders())
-    jsonfuck = json.loads(request.content)
-    return jsonfuck
 
 
 
@@ -161,12 +135,12 @@ async def main():
     """
 
     while True:
-        lastInserted = await dbredeem.get_last_inserted(dbName, colName)
+        lastInserted = await dbredeem.get_last_inserted(config.dbName, config.colName)
         if lastInserted:
-            Info.lastredeemid = lastInserted['redeemID']
+            dataStorage.redeemData.lastredeemid = lastInserted['redeemID']
         else:
-            Info.lastredeemid = 0
-        await log("The last redeemID inserted is {0}".format(Info.lastredeemid), 5)
+            dataStorage.redeemData.lastredeemid = 0
+        await log("The last redeemID inserted is {0}".format(dataStorage.redeemData.lastredeemid), 5)
         await ProcessData()
         await asyncio.sleep(5)
 
